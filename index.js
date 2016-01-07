@@ -73,7 +73,7 @@ const i2cCheckAlive = Symbol('i2cCheckAlive');
 const pinMode = Symbol('pinMode');
 
 function toArray(buffer) {
-  constresult = buffer.toString().split('\n').map(i => {
+  const result = buffer.toString().split('\n').map(i => {
     return i.trim();
   });
 
@@ -557,8 +557,8 @@ class Raspi extends EventEmitter {
   }
 
   sendOneWireConfig(pin, enableParasiticPower) {
-    execSync.run('modprobe w1-gpio');
-    execSync.run('modprobe w1-therm');
+    execSync('modprobe w1-gpio');
+    execSync('modprobe w1-therm');
   }
 
   sendOneWireSearch(pin, callback) {

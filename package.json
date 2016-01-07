@@ -20,7 +20,7 @@
     "raspi-i2c": "2.2.0",
     "raspi-led": "1.2.0",
     "raspi-pwm": "2.1.0",
-    "sync-exec": "^0.6.2"
+    "sync-exec": "~0.5"
   },
   "devDependencies": {
     "del": "^2.0.2",
