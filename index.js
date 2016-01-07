@@ -1,29 +1,30 @@
 /*
-Copyright (c) 2014 Bryan Hughes <bryan@theoreticalideations.com>
+ Copyright (c) 2014 Bryan Hughes <bryan@theoreticalideations.com>
 
-Permission is hereby granted, free of charge, to any person
-obtaining a copy of this software and associated documentation
-files (the 'Software'), to deal in the Software without
-restriction, including without limitation the rights to use,
-copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the
-Software is furnished to do so, subject to the following
-conditions:
+ Permission is hereby granted, free of charge, to any person
+ obtaining a copy of this software and associated documentation
+ files (the 'Software'), to deal in the Software without
+ restriction, including without limitation the rights to use,
+ copy, modify, merge, publish, distribute, sublicense, and/or sell
+ copies of the Software, and to permit persons to whom the
+ Software is furnished to do so, subject to the following
+ conditions:
 
-The above copyright notice and this permission notice shall be
-included in all copies or substantial portions of the Software.
+ The above copyright notice and this permission notice shall be
+ included in all copies or substantial portions of the Software.
 
-THE SOFTWARE IS PROVIDED 'AS IS', WITHOUT WARRANTY OF ANY KIND,
-EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
-OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
-NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
-HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
-WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
-OTHER DEALINGS IN THE SOFTWARE.
-*/
+ THE SOFTWARE IS PROVIDED 'AS IS', WITHOUT WARRANTY OF ANY KIND,
+ EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+ OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+ HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ OTHER DEALINGS IN THE SOFTWARE.
+ */
 
 import fs from 'fs';
+import path from 'path';
 import { EventEmitter } from 'events';
 import { init } from 'raspi';
 import { getPins, getPinNumber } from 'raspi-board';
@@ -31,6 +32,8 @@ import { PULL_NONE, PULL_UP, PULL_DOWN, DigitalOutput, DigitalInput } from 'rasp
 import { PWM } from 'raspi-pwm';
 import { I2C } from 'raspi-i2c';
 import { LED } from 'raspi-led';
+
+const execSync = require('sync-exec').run;
 
 // Hacky quick Symbol polyfill, since es6-symbol refuses to install with Node 0.10 from http://node-arm.herokuapp.com/
 if (typeof global.Symbol != 'function') {
@@ -52,6 +55,9 @@ const HIGH = 1;
 
 const LED_PIN = -1;
 
+const ONE_WIRE_LIST_PATH = '/sys/devices/w1_bus_master1/w1_master_slaves';
+const ONE_WIRE_BASE_PATH = '/sys/bus/w1/devices/';
+
 // Settings
 const DIGITAL_READ_UPDATE_RATE = 19;
 
@@ -66,6 +72,21 @@ const i2cDelay = Symbol('i2cDelay');
 const i2cRead = Symbol('i2cRead');
 const i2cCheckAlive = Symbol('i2cCheckAlive');
 const pinMode = Symbol('pinMode');
+
+function toArray(buffer) {
+  constresult = buffer.toString().split('\n').map(i => {
+    return i.trim();
+  });
+
+  return result.filter(item => {
+    return !!item;
+  });
+}
+
+function round(number, places) {
+  const pow = Math.pow(10, places);
+  return Math.round(number * pow) / pow;
+}
 
 class Raspi extends EventEmitter {
 
@@ -158,8 +179,8 @@ class Raspi extends EventEmitter {
 
       // Slight hack to get the LED in there, since it's not actually a pin
       pinMappings[LED_PIN] = {
-        pins: [ LED_PIN ],
-        peripherals: [ 'gpio' ]
+        pins: [LED_PIN],
+        peripherals: ['gpio']
       };
 
       Object.keys(pinMappings).forEach((pin) => {
@@ -245,7 +266,8 @@ class Raspi extends EventEmitter {
               get() {
                 return 0;
               },
-              set() {}
+              set() {
+              }
             },
             report: {
               enumerable: true,
@@ -286,7 +308,10 @@ class Raspi extends EventEmitter {
   }
 
   pinMode(pin, mode) {
-    this[pinMode]({ pin, mode });
+    this[pinMode]({
+      pin,
+      mode
+    });
   }
 
   [pinMode]({ pin, mode, pullResistor = PULL_NONE }) {
@@ -359,9 +384,16 @@ class Raspi extends EventEmitter {
   digitalWrite(pin, value) {
     const pinInstance = this[getPinInstance](this.normalize(pin));
     if (pinInstance.mode === INPUT_MODE && value === HIGH) {
-      this[pinMode]({ pin, mode: INPUT_MODE, pullResistor: PULL_UP });
+      this[pinMode]({
+        pin,
+        mode: INPUT_MODE,
+        pullResistor: PULL_UP
+      });
     } else if (pinInstance.mode != OUTPUT_MODE) {
-      this[pinMode]({ pin, mode: OUTPUT_MODE });
+      this[pinMode]({
+        pin,
+        mode: OUTPUT_MODE
+      });
     }
     if (pinInstance.mode === OUTPUT_MODE && value != pinInstance.previousWrittenValue) {
       pinInstance.peripheral.write(value ? HIGH : LOW);
@@ -429,9 +461,7 @@ class Raspi extends EventEmitter {
     this[i2cCheckAlive]();
 
     // If i2cWrite was used for an i2cWriteReg call...
-    if (arguments.length === 3 &&
-        !Array.isArray(cmdRegOrData) &&
-        !Array.isArray(inBytes)) {
+    if (arguments.length === 3 && !Array.isArray(cmdRegOrData) && !Array.isArray(inBytes)) {
       return this.i2cWriteReg(address, cmdRegOrData, inBytes);
     }
 
@@ -467,16 +497,14 @@ class Raspi extends EventEmitter {
     this[i2cCheckAlive]();
 
     // Fix arguments if called with Firmata.js API
-    if (arguments.length == 4 &&
-      typeof register == 'number' &&
-      typeof bytesToRead == 'function'
-    ) {
+    if (arguments.length == 4 && typeof register == 'number' && typeof bytesToRead == 'function') {
       callback = bytesToRead;
       bytesToRead = register;
       register = null;
     }
 
-    callback = typeof callback === 'function' ? callback : () => {};
+    callback = typeof callback === 'function' ? callback : () => {
+    };
 
     let event = 'I2C-reply' + address + '-';
     event += register !== null ? register : 0;
@@ -529,36 +557,76 @@ class Raspi extends EventEmitter {
     return this.i2cReadOnce(...rest);
   }
 
-  sendOneWireConfig() {
-    throw new Error('sendOneWireConfig is not supported on the Raspberry Pi');
+  sendOneWireConfig(pin, enableParasiticPower) {
+    execSync('modprobe w1-gpio');
+    execSync('modprobe w1-therm');
   }
 
-  sendOneWireSearch() {
-    throw new Error('sendOneWireSearch is not supported on the Raspberry Pi');
+  sendOneWireSearch(pin, callback) {
+    this._sendOneWireSearch(callback);
   }
 
-  sendOneWireAlarmsSearch() {
-    throw new Error('sendOneWireAlarmsSearch is not supported on the Raspberry Pi');
+  sendOneWireAlarmsSearch(pin, callback) {
+    this._sendOneWireSearch(callback);
   }
 
-  sendOneWireRead() {
-    throw new Error('sendOneWireRead is not supported on the Raspberry Pi');
+  _sendOneWireSearch(callback) {
+    fs.readFile(ONE_WIRE_LIST_PATH, (err, data) => {
+      if (err) {
+        callback(err, null);
+      } else {
+        callback(null, toArray(data));
+      }
+    });
   }
 
-  sendOneWireReset() {
-    throw new Error('sendOneWireConfig is not supported on the Raspberry Pi');
+  sendOneWireRead(pin, device, numBytesToRead, callback) {
+    this._sendOneWireRequest(pin, device, callback);
   }
 
-  sendOneWireWrite() {
-    throw new Error('sendOneWireWrite is not supported on the Raspberry Pi');
+  sendOneWireReset(pin) {
+    // throw new Error('sendOneWireConfig is not supported on the Raspberry Pi');
   }
 
-  sendOneWireDelay() {
-    throw new Error('sendOneWireDelay is not supported on the Raspberry Pi');
+  sendOneWireWrite(pin, device, data) {
+    // throw new Error('sendOneWireWrite is not supported on the Raspberry Pi');
   }
 
-  sendOneWireWriteAndRead() {
-    throw new Error('sendOneWireWriteAndRead is not supported on the Raspberry Pi');
+  sendOneWireDelay(pin, delay) {
+    // throw new Error('sendOneWireDelay is not supported on the Raspberry Pi');
+  }
+
+  sendOneWireWriteAndRead(pin, device, data, numBytesToRead, callback) {
+    // throw new Error('sendOneWireWriteAndRead is not supported on the Raspberry Pi');
+  }
+
+  _getOneWireFileName(deviceId) {
+    return path.resolve(ONE_WIRE_BASE_PATH, deviceId, 'w1_slave');
+  }
+
+  _sendOneWireRequest(pin, device, callback) {
+    fs.readFile(this._getOneWireFileName(device), (err, data) => {
+      if (err) {
+        if (err.code && err.code === 'ENOENT') {
+          callback('Could not read device content. Device \'' + device + '\' not found', null);
+        } else {
+          callback(err, null);
+        }
+      } else {
+        const dataStr = data.toString();
+
+        let result = false;
+        if (dataStr && dataStr.indexOf('YES') > -1) {
+          const temp = dataStr.match(/t=(-?(\d+))/);
+
+          if (temp) {
+            result = round(parseInt(temp[1], 10) / 1000, 1);
+          }
+        }
+
+        callback(null, result);
+      }
+    });
   }
 
   setSamplingInterval() {
@@ -598,7 +666,8 @@ Object.defineProperty(Raspi, 'isRaspberryPi', {
     let isRaspberryPi = false;
     try {
       isRaspberryPi = fs.readFileSync('/etc/os-release').toString().indexOf('Raspbian') !== -1;
-    } catch (e) {}// Squash file not found, etc errors
+    } catch (e) {
+    }// Squash file not found, etc errors
     return isRaspberryPi;
   }
 });
