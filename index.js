@@ -32,7 +32,7 @@ import { PULL_NONE, PULL_UP, PULL_DOWN, DigitalOutput, DigitalInput } from 'rasp
 import { PWM } from 'raspi-pwm';
 import { I2C } from 'raspi-i2c';
 import { LED } from 'raspi-led';
-import { execSync } from 'sync-exec';
+import execSync from 'sync-exec';
 
 // Hacky quick Symbol polyfill, since es6-symbol refuses to install with Node 0.10 from http://node-arm.herokuapp.com/
 if (typeof global.Symbol != 'function') {
