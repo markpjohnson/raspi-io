@@ -72,9 +72,97 @@ const i2cRead = Symbol('i2cRead');
 const i2cCheckAlive = Symbol('i2cCheckAlive');
 const pinMode = Symbol('pinMode');
 
+const Encoder = {
+  to7BitArray: function(data) {
+    var shift = 0;
+    var previous = 0;
+    var output = [];
+
+    data.forEach(function(byte) {
+      if (shift == 0) {
+        output.push(byte & 0x7f)
+        shift++;
+        previous = byte >> 7;
+      } else {
+        output.push(((byte << shift) & 0x7f) | previous);
+        if (shift == 6) {
+          output.push(byte >> 1);
+          shift = 0;
+        } else {
+          shift++;
+          previous = byte >> (8 - shift);
+        }
+      }
+    })
+
+    if (shift > 0) {
+      output.push(previous);
+    }
+
+    return output;
+  },
+  from7BitArray: function(encoded) {
+    var expectedBytes = (encoded.length) * 7 >> 3;
+    var decoded = [];
+
+    for (var i = 0; i < expectedBytes ; i++) {
+      var j = i << 3;
+      var pos = parseInt(j/7);
+      var shift = j % 7;
+      decoded[i] = (encoded[pos] >> shift) | ((encoded[pos+1] << (7 - shift)) & 0xFF);
+    }
+
+    return decoded;
+  },
+  crc8: function(data) {
+    var crc = 0;
+
+    for(var i = 0; i < data.length; i++) {
+      var inbyte = data[i];
+
+      for (var n = 8; n; n--) {
+        var mix = (crc ^ inbyte) & 0x01;
+        crc >>= 1;
+
+        if (mix) {
+          crc ^= 0x8C;
+        }
+
+        inbyte >>= 1;
+      }
+    }
+    return crc;
+  },
+  readDevices: function(data) {
+    var deviceBytes = Encoder.from7BitArray(data);
+    var devices = [];
+
+    for(var i = 0; i < deviceBytes.length; i += 8) {
+      var device = deviceBytes.slice(i, i + 8);
+
+      if(device.length != 8) {
+        continue;
+      }
+
+      var check = Encoder.crc8(device.slice(0, 7));
+
+      if(check != device[7]) {
+        console.error("ROM invalid!");
+      }
+
+      devices.push(device);
+    }
+
+    return devices;
+  }
+};
+
 function toArray(buffer) {
+  var devices = Encoder.readDevices(buffer);
+  console.log('BUFFER', devices);
+  console.log('BUFFER', devices[0]);
   const result = buffer.toString().split('\n').map(i => {
-    return i.trim();
+    return new Buffer(i.trim());
   });
 
   return result.filter(item => {

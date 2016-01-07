@@ -28,7 +28,7 @@ var sourcemaps = require('gulp-sourcemaps');
 var eslint = require('gulp-eslint');
 var del = require('del');
 
-gulp.task('default', ['clean', 'lint'], function() {
+gulp.task('default', ['clean'], function() {
   return gulp.src('index.js')
     .pipe(sourcemaps.init())
       .pipe(babel({
