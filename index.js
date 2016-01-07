@@ -32,8 +32,7 @@ import { PULL_NONE, PULL_UP, PULL_DOWN, DigitalOutput, DigitalInput } from 'rasp
 import { PWM } from 'raspi-pwm';
 import { I2C } from 'raspi-i2c';
 import { LED } from 'raspi-led';
-
-const execSync = require('sync-exec').run;
+import { execSync } from 'sync-exec';
 
 // Hacky quick Symbol polyfill, since es6-symbol refuses to install with Node 0.10 from http://node-arm.herokuapp.com/
 if (typeof global.Symbol != 'function') {
@@ -558,8 +557,8 @@ class Raspi extends EventEmitter {
   }
 
   sendOneWireConfig(pin, enableParasiticPower) {
-    execSync('modprobe w1-gpio');
-    execSync('modprobe w1-therm');
+    execSync.run('modprobe w1-gpio');
+    execSync.run('modprobe w1-therm');
   }
 
   sendOneWireSearch(pin, callback) {
